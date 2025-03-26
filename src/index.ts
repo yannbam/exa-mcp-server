@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
+  ToolSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import axios from "axios";
 import dotenv from "dotenv";
@@ -34,7 +41,7 @@ const API_CONFIG = {
   ENDPOINTS: {
     SEARCH: '/search'
   },
-  DEFAULT_NUM_RESULTS: 5,
+  DEFAULT_NUM_RESULTS: 3,
   DEFAULT_MAX_CHARACTERS: 3000
 } as const;
 
@@ -51,6 +58,13 @@ class ExaServer {
     this.server = new McpServer({
       name: "exa-search-server",
       version: "0.2.1"
+      },
+      {
+      capabilities: {
+        resources: {listChanged: true},
+        tools: {listChanged: true},
+        prompts: {listChanged: true}
+      }
     });
     
     log("Server initialized");
@@ -59,11 +73,11 @@ class ExaServer {
   private setupTools(): void {
     // Define the search tool
     this.server.tool(
-      "search",
+      "web-search",
       "Search the web using Exa AI - performs real-time web searches and can scrape content from specific URLs. Supports configurable result counts, live crawling options, and returns the content from the most relevant websites.",
       {
         query: z.string().describe("Search query"),
-        numResults: z.number().optional().describe("Number of search results to return (default: 5)"),
+        numResults: z.number().optional().describe("Number of search results to return (default: 3)"),
         livecrawl: z.enum(['always', 'fallback']).optional().describe("Livecrawl strategy: 'always' to always crawl live, 'fallback' to only crawl when index has no result")
       },
       async ({ query, numResults, livecrawl }) => {
@@ -160,14 +174,26 @@ class ExaServer {
         }
       }
     );
-    
+
     log("Search tool registered");
+  }
+
+  // return empty lists when polled
+  private setupOtherHandlers(): void {
+    this.server.server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+      return {resources: []};
+    });
+
+    this.server.server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
+      return {prompts: []};
+    });
   }
 
   async run(): Promise<void> {
     try {
       // Set up tools before connecting
       this.setupTools();
+      this.setupOtherHandlers();
       
       log("Starting Exa MCP server...");
       const transport = new StdioServerTransport();
