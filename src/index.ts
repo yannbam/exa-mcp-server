@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
+  ToolSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import dotenv from "dotenv";
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -73,7 +80,13 @@ class ExaServer {
     this.server = new McpServer({
       name: "exa-search-server",
       version: "0.3.6"
-    });
+    },
+    {
+    capabilities: {
+      resources: {listChanged: false},
+      tools: {listChanged: false},
+      prompts: {listChanged: false}
+    }});
     
     log("Server initialized");
   }
@@ -103,10 +116,23 @@ class ExaServer {
     return registeredTools;
   }
 
+  // return empty lists when polled (to avoid method not found erros)
+  private setupOtherHandlers(): void {
+    this.server.server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+      return {resources: []};
+    });
+
+    this.server.server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
+      return {prompts: []};
+    });
+  }
+
+
   async run(): Promise<void> {
     try {
       // Set up tools before connecting
       const registeredTools = this.setupTools();
+      this.setupOtherHandlers();
       
       log(`Starting Exa MCP server with ${registeredTools.length} tools: ${registeredTools.join(', ')}`);
       
