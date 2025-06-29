@@ -25,6 +25,7 @@ export const API_CONFIG = {
     SEARCH: '/search'
   },
   DEFAULT_NUM_RESULTS: 5,
+  DEFAULT_TYPE: "auto",
   DEFAULT_MAX_CHARACTERS: 3000
 } as const;
 

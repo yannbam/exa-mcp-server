@@ -5,16 +5,20 @@ import { ExaSearchRequest, ExaSearchResponse } from "../types.js";
 import { createRequestLogger } from "../utils/logger.js";
 
 // Register the web search tool
-toolRegistry["web_search"] = {
-  name: "web_search",
+toolRegistry["exa_search"] = {
+  name: "exa_search",
   description: "Search the web using Exa AI - performs real-time web searches and can scrape content from specific URLs. Supports configurable result counts and returns the content from the most relevant websites.",
   schema: {
-    query: z.string().describe("Search query"),
-    numResults: z.number().optional().describe("Number of search results to return (default: 5)")
+    query: z.string().describe("Query string for the search.\nIMPORTANT: When using neural search (type=neural) you MUST frame queries as if you’re sharing a link to someone. (1. Phrase as Statements: \"Here’s a great article about X:\" works better than \"What is X?\" 2. Add Context: Include modifiers like \"funny\", \"academic\", or specific websites to narrow results. 3. End with a Colon: Many effective prompts end with \":\", mimicking natural link sharing.)"),
+    type: z.enum(["auto","keyword","neural"]).optional().describe(`Type of search.\n1. \"neural\" uses an embeddings-based model. \n2. \"keyword\" keyword search.\n3. \"auto\" automatically decides between keyword and neural.\n(default: ${API_CONFIG.DEFAULT_TYPE})`),
+    category: z.enum(["company","research paper","news","pdf","github","tweet","personal site","linkedin profile","financial report"]).optional().describe("Data category to focus on. Available options: company, research paper, news, pdf, github, tweet, personal site, linkedin profile, financial report"),
+    numResults: z.number().max(100).optional().describe(`Number of search results to return (default: ${API_CONFIG.DEFAULT_NUM_RESULTS})`),
+    includeDomains: z.string().array().optional().describe("List of domains to include in the search. If specified, results will come *ONLY* from these domains. Example: [\"arxiv.org\", \"paperswithcode.com\"]"),
+    excludeDomains: z.string().array().optional().describe("List of domains to exclude from search results. If specified, no results will be returned from these domains.")
   },
-  handler: async ({ query, numResults }, extra) => {
-    const requestId = `web_search-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const logger = createRequestLogger(requestId, 'web_search');
+  handler: async ({ query, type, category, numResults, includeDomains, excludeDomains }, extra) => {
+    const requestId = `exa_search-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const logger = createRequestLogger(requestId, 'exa_search');
     
     logger.start(query);
     
@@ -32,8 +36,11 @@ toolRegistry["web_search"] = {
 
       const searchRequest: ExaSearchRequest = {
         query,
-        type: "auto",
+        type: type || API_CONFIG.DEFAULT_TYPE,
+        ...(category ? { category } : {}),
         numResults: numResults || API_CONFIG.DEFAULT_NUM_RESULTS,
+        ...(includeDomains ? { includeDomains } : {}),
+        ...(excludeDomains ? { excludeDomains } : {}),
         contents: {
           text: {
             maxCharacters: API_CONFIG.DEFAULT_MAX_CHARACTERS
@@ -42,7 +49,8 @@ toolRegistry["web_search"] = {
         }
       };
       
-      logger.log("Sending request to Exa API");
+      logger.log(`searchRequest: ${JSON.stringify(searchRequest, null, 2)}`); // jb
+      logger.log("Sending request to Exa API"); 
       
       const response = await axiosInstance.post<ExaSearchResponse>(
         API_CONFIG.ENDPOINTS.SEARCH,
